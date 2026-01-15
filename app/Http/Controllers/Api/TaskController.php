@@ -3,55 +3,70 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Task;
-
+use App\Http\Resources\TaskResource;
+use Illuminate\Http\Request;
 
 class TaskController extends Controller
 {
-    // GET /tasks
     public function index()
     {
-        return response()->json(Task::all());
+        $tasks = Task::with('status')->orderBy('execution_datetime')->get();
+        return TaskResource::collection($tasks);
     }
 
-    // POST /tasks
+    public function show(Task $task)
+    {
+        $task->load('status');
+        return new TaskResource($task);
+    }
+
     public function store(Request $request)
     {
-        $request->validate([
-            'title' => 'required|string'
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'execution_datetime' => 'required|date',
+            'status_id' => 'required|exists:statuses,id'
+        ], [
+            'title.required' => 'The task title is required.',
+            'title.string' => 'The task title must be a string.',
+            'title.max' => 'The task title must not exceed 255 characters.',
+            'execution_datetime.required' => 'The execution date and time is required.',
+            'execution_datetime.date' => 'The execution date and time must be a valid date format.',
+            'status_id.required' => 'A status must be selected for the task.',
+            'status_id.exists' => 'The selected status does not exist.'
         ]);
 
-        $task = Task::create($request->all());
+        $task = Task::create($validated);
+        $task->load('status');
 
-        return response()->json($task, 201);
+        return new TaskResource($task);
     }
 
-    // GET /tasks/{id}
-    public function show($id)
+    public function update(Request $request, Task $task)
     {
-        return response()->json(Task::findOrFail($id));
-    }
-
-    // PUT /tasks/{id}
-    public function update(Request $request, $id)
-    {
-        $task = Task::findOrFail($id);
-
-        $request->validate([
-            'title' => 'required|string'
+        $validated = $request->validate([
+            'title' => 'sometimes|string|max:255',
+            'description' => 'nullable|string',
+            'execution_datetime' => 'sometimes|date',
+            'status_id' => 'sometimes|exists:statuses,id'
+        ], [
+            'title.string' => 'The task title must be a string.',
+            'title.max' => 'The task title must not exceed 255 characters.',
+            'execution_datetime.date' => 'The execution date and time must be a valid date format.',
+            'status_id.exists' => 'The selected status does not exist.'
         ]);
 
-        $task->update($request->all());
+        $task->update($validated);
+        $task->load('status');
 
-        return response()->json($task);
+        return new TaskResource($task);
     }
 
-    // DELETE /tasks/{id}
-    public function destroy($id)
+    public function destroy(Task $task)
     {
-        Task::findOrFail($id)->delete();
-
-        return response()->json(['message' => 'Task deleted']);
+        $task->delete();
+        return response()->json(null, 204);
     }
 }
